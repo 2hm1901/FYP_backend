@@ -11,9 +11,14 @@ class BookedCourt extends Model
 
     protected $fillable = [
         'user_id',
-        'court_id',
+        'venue_id',
+        'venue_name',
+        'renter_name',
+        'renter_email',
+        'renter_phone',
         'courts_booked',
         'total_price',
         'booking_date',
+        'note',
     ];
 }

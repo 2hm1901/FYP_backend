@@ -48,7 +48,7 @@ class AuthController extends Controller
             // ];
         }
 
-        $token = $user->createToken($user->name);
+        $token = $user->createToken($user->username);
 
         return [
             'user' => $user,
