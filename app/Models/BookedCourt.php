@@ -13,12 +13,14 @@ class BookedCourt extends Model
         'user_id',
         'venue_id',
         'venue_name',
+        'venue_location',
         'renter_name',
         'renter_email',
         'renter_phone',
         'courts_booked',
         'total_price',
         'booking_date',
+        'status',
         'note',
     ];
 }

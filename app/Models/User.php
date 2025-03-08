@@ -25,6 +25,7 @@ class User extends Authenticatable
         'phone_number',
         'user_type',
         'skill_level',
+        'avatar',
         'created_at',
         'updated_at',
     ];

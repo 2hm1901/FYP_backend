@@ -41,12 +41,9 @@ return [
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),
-            'url' => env('APP_URL').'/storage',
+            'url' => env('APP_URL', 'http://localhost:8000') . '/storage', // Giá trị mặc định nếu không có trong .env
             'visibility' => 'public',
-            'throw' => false,
-            'report' => false,
         ],
-
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),
