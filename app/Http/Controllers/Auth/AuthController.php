@@ -20,11 +20,11 @@ class AuthController extends Controller
 
         $user = User::create($fields);
 
-        $token = $user->createToken($request->username);
+        $user->sendEmailVerificationNotification();
 
         return [
             'user' => $user,
-            'token' => $token->plainTextToken
+            'message' => 'Đăng ký thành công! Vui lòng kiểm tra email để xác thực tài khoản.',
         ];
     }
 
@@ -48,6 +48,14 @@ class AuthController extends Controller
             // ];
         }
 
+        if (!$user->hasVerifiedEmail()) {
+            return [
+                'errors' => [
+                    'email' => ['Vui lòng xác nhận email trước khi đăng nhập.']
+                ]
+            ];
+        }
+
         $token = $user->createToken($user->username);
 
         return [
@@ -63,5 +71,32 @@ class AuthController extends Controller
         return [
             'message' => 'You are logged out.' 
         ];
+    }
+    public function verifyEmail(Request $request, $id, $hash)
+    {
+        $user = User::findOrFail($id);
+
+    if (!hash_equals((string) $hash, sha1($user->email))) {
+        return [
+            'errors' => ['message' => 'Liên kết không hợp lệ']
+        ];
+    }
+
+    if ($user->hasVerifiedEmail()) {
+        return [
+            'message' => 'Email đã được xác nhận'
+        ];
+    }
+
+    $user->markEmailAsVerified();
+    $user->save();
+
+    $token = $user->createToken($user->username)->plainTextToken;
+
+    return [
+        'message' => 'Email đã được xác nhận thành công',
+        'token' => $token,
+        'user' => $user
+    ];
     }
 }

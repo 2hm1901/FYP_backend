@@ -14,6 +14,7 @@ Route::get('/user', function (Request $request) {
 })->middleware('auth:sanctum');
 
 //Auth APIs
+Route::get('/email/verify/{id}/{hash}', [AuthController::class, 'verifyEmail'])->name('verification.verify');
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
@@ -21,7 +22,6 @@ Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanc
 //Venue APIs
 Route::get("/getAllVenue", [VenueController::class,"getVenueList"]);
 Route::get("/getVenueDetail/{id}", [VenueController::class,"getVenueDetail"]);
-Route::get("/getBookingTable/{id}", [VenueController::class,"getBookingTable"]);
 Route::get("/getBookingTable/{id}", [VenueController::class,"getBookingTable"]);
 
 //Game APIs
@@ -41,3 +41,4 @@ Route::post('/bookCourt', [BookingController::class, 'bookCourt']);
 Route::middleware('auth:sanctum')->group(function () {
     Route::put('updateProfile', [ProfileController::class, 'update']);
 });
+
