@@ -7,6 +7,8 @@ use App\Http\Controllers\User\VenueController;
 use App\Http\Controllers\User\GameController;
 use App\Http\Controllers\User\BookingController;
 use App\Http\Controllers\User\ProfileController;
+use App\Http\Controllers\Auth\ForgotPasswordController;
+
 
 
 Route::get('/user', function (Request $request) {
@@ -18,6 +20,10 @@ Route::get('/email/verify/{id}/{hash}', [AuthController::class, 'verifyEmail'])-
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
+
+//Forgot Password APIs
+Route::post('/forgot-password', [ForgotPasswordController::class, 'forgot']);
+Route::post('/reset-password', [ForgotPasswordController::class, 'reset']);
 
 //Venue APIs
 Route::get("/getAllVenue", [VenueController::class,"getVenueList"]);
