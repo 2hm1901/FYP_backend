@@ -3,6 +3,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Auth\AuthController;
+use App\Http\Controllers\User\UserController;
 use App\Http\Controllers\User\VenueController;
 use App\Http\Controllers\User\GameController;
 use App\Http\Controllers\User\BookingController;
@@ -21,6 +22,10 @@ Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
 
+//User APIs
+Route::get('/venue-owner', [UserController::class,'getOwnerInfo']);
+Route::get('/getUser', [UserController::class, 'getUser']);
+
 //Forgot Password APIs
 Route::post('/forgot-password', [ForgotPasswordController::class, 'forgot']);
 Route::post('/reset-password', [ForgotPasswordController::class, 'reset']);
@@ -29,6 +34,10 @@ Route::post('/reset-password', [ForgotPasswordController::class, 'reset']);
 Route::get("/getAllVenue", [VenueController::class,"getVenueList"]);
 Route::get("/getVenueDetail/{id}", [VenueController::class,"getVenueDetail"]);
 Route::get("/getBookingTable/{id}", [VenueController::class,"getBookingTable"]);
+Route::get("/getMyVenues", [VenueController::class,"getMyVenues"]);
+Route::post("/createNewVenue", [VenueController::class,"createNewVenue"]);
+Route::put('/venues/{id}', [VenueController::class, 'updateVenue']);
+Route::delete('/venues/{id}', [VenueController::class, 'deleteVenue']);
 
 //Game APIs
 Route::get("/getAllGame", [GameController::class,"getAllGame"]);
@@ -43,8 +52,12 @@ Route::delete("/cancelGame", [GameController::class,"cancelGame"]);
 Route::get("/getBookings", [BookingController::class,"getBookings"]);
 Route::get('/getBookedCourts/{id}', [BookingController::class, 'getBookedCourt']);
 Route::post('/bookCourt', [BookingController::class, 'bookCourt']);
+Route::get('/getBookedCourtList', [BookingController::class,'getBookedCourtList']);
+Route::get('/getRequests', [BookingController::class,'getRequests']);
 
+//Profile APIs
 Route::middleware('auth:sanctum')->group(function () {
     Route::put('updateProfile', [ProfileController::class, 'update']);
 });
+
 

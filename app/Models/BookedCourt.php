@@ -23,4 +23,14 @@ class BookedCourt extends Model
         'status',
         'note',
     ];
+
+    public function venue()
+    {
+        return $this->belongsTo(Venue::class, 'venue_id');
+    }
+
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
 }
