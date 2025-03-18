@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\User;
 
 use App\Http\Controllers\Controller;
+use App\Models\Notification;
 use Illuminate\Http\Request;
 use App\Models\BookedCourt;
 use App\Models\Venue;
@@ -279,15 +280,20 @@ class BookingController extends Controller
             // Gán lại mảng đã sửa đổi vào model
             $booking->courts_booked = $courtsBooked;
             $booking->save();
-            Log::info("Firing CourtCancelled event for user: {$booking->user_id}");
-            Log::info('Broadcasting auth token:', ['token' => request()->bearerToken()]);
+
+            // Lưu thông báo vào database
+            $notification = Notification::create([
+                'user_id' => $booking->user_id,
+                'message' => "Sân {$courtNumber} tại {$booking->venue_name} ({$startTime} - {$endTime}) đã bị hủy bởi chủ sân",
+            ]);
             // Phát sự kiện CourtCancelled
             event(new CourtCancelled(
                 $booking->user_id,
                 $courtNumber,
                 $startTime,
                 $endTime,
-                $booking->venue_name
+                $booking->venue_name,
+                $notification->id
             ));
 
             return response()->json([

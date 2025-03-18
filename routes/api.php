@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\User\NotificationController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Auth\AuthController;
@@ -55,6 +56,10 @@ Route::post('/bookCourt', [BookingController::class, 'bookCourt']);
 Route::get('/getBookedCourtList', [BookingController::class,'getBookedCourtList']);
 Route::get('/getRequests', [BookingController::class,'getRequests']);
 Route::put('/cancelCourt', [BookingController::class, 'cancelCourt']);
+
+//Notification APIs
+Route::get('/notifications', [NotificationController::class, 'getNotifications']);
+Route::post('/notifications/mark-read', [NotificationController::class, 'markNotificationAsRead'])->middleware('auth:sanctum');
 
 //Profile APIs
 Route::middleware('auth:sanctum')->group(function () {

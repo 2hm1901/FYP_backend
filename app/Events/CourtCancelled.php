@@ -2,6 +2,7 @@
 
 namespace App\Events;
 
+use App\Models\Notification;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
@@ -18,14 +19,16 @@ class CourtCancelled implements ShouldBroadcast
     public $startTime;
     public $endTime;
     public $venueName;
+    public $notificationId;
 
-    public function __construct($userId, $courtNumber, $startTime, $endTime, $venueName)
+    public function __construct($userId, $courtNumber, $startTime, $endTime, $venueName, $notificationId)
     {
         $this->userId = $userId;
         $this->courtNumber = $courtNumber;
         $this->startTime = $startTime;
         $this->endTime = $endTime;
         $this->venueName = $venueName;
+        $this->notificationId = $notificationId;
     }
 
     public function broadcastOn()
