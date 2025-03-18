@@ -20,17 +20,6 @@ class BookedCourt extends Model
         'courts_booked',
         'total_price',
         'booking_date',
-        'status',
         'note',
     ];
-
-    public function venue()
-    {
-        return $this->belongsTo(Venue::class, 'venue_id');
-    }
-
-    public function user()
-    {
-        return $this->belongsTo(User::class, 'user_id');
-    }
 }

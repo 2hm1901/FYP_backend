@@ -6,25 +6,41 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\BookedCourt;
 use App\Models\Venue;
+use App\Events\CourtCancelled;
+use Illuminate\Support\Facades\Log;
 
 class BookingController extends Controller
 {
-    //API to get all bookings
-    public function getBookings(Request $request){
+    // API lấy danh sách các sân đã đặt của một user với status linh hoạt
+    public function getBookings(Request $request)
+    {
         $id = $request->user_id;
         $statuses = $request->query('status', []);
 
-        $query = BookedCourt::where("user_id", (int)$id);
+        $query = BookedCourt::where("user_id", (int) $id);
 
         if (!empty($statuses)) {
-            $query->whereIn('status', $statuses);
+            // Lọc các booking có ít nhất một sân với status trong danh sách
+            $query->where('courts_booked', 'elemMatch', ['status' => ['$in' => $statuses]]);
         }
 
         $bookings = $query->get();
 
-        return response()->json($bookings);
+        // Lọc chỉ giữ lại các sân có status khớp với $statuses trong courts_booked
+        $filteredBookings = $bookings->map(function ($booking) use ($statuses) {
+            if (!empty($statuses)) {
+                $booking->courts_booked = array_filter($booking->courts_booked, function ($court) use ($statuses) {
+                    return in_array($court['status'], $statuses);
+                });
+                // Đặt lại key của mảng để tránh lỗ hổng chỉ số
+                $booking->courts_booked = array_values($booking->courts_booked);
+            }
+            return $booking;
+        });
+
+        return response()->json($filteredBookings);
     }
-    //API lấy danh sách yêu cầu thuê sân dành cho chủ sân
+    // API lấy danh sách yêu cầu thuê sân dành cho chủ sân
     public function getRequests(Request $request)
     {
         try {
@@ -35,6 +51,7 @@ class BookingController extends Controller
 
             $id = $request->user_id;
 
+            // Lấy danh sách venue thuộc owner
             $venues = Venue::where('owner_id', $id)->get();
 
             if ($venues->isEmpty()) {
@@ -47,18 +64,27 @@ class BookingController extends Controller
 
             $venueIds = $venues->pluck('id')->toArray();
 
-            $requests = BookedCourt::whereIn('venue_id', $venueIds)
-                ->where('status', 'awaiting')
+            // Lấy các booking có ít nhất một sân với status "awaiting"
+            $bookings = BookedCourt::whereIn('venue_id', $venueIds)
+                ->where('courts_booked', 'elemMatch', ['status' => 'awaiting'])
                 ->get();
 
+            // Lọc chỉ giữ lại các sân có status "awaiting" trong courts_booked
+            $filteredBookings = $bookings->map(function ($booking) {
+                $booking->courts_booked = array_filter($booking->courts_booked, function ($court) {
+                    return $court['status'] === 'awaiting';
+                });
+                // Đặt lại key của mảng để tránh lỗ hổng chỉ số
+                $booking->courts_booked = array_values($booking->courts_booked);
+                return $booking;
+            });
 
             // Trả về response
             return response()->json([
                 'success' => true,
                 'message' => 'Requests retrieved successfully',
-                'data' => $requests
+                'data' => $filteredBookings
             ], 200);
-
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
@@ -73,20 +99,18 @@ class BookingController extends Controller
             ], 500);
         }
     }
-    //API lấy danh sách sân đã được thuê dành cho chủ sân
+    // API lấy danh sách sân đã được thuê dành cho chủ sân với status linh hoạt
     public function getBookedCourtList(Request $request)
     {
         try {
-            // Validate request
             $request->validate([
                 'user_id' => 'required|exists:users,id',
-                'status' => 'nullable|array',
             ]);
 
             $ownerId = $request->user_id;
-            $statuses = $request->query('status', []);
+            $statuses = $request->query('status', []); // Lấy statuses từ query string
 
-            // Lấy tất cả venues thuộc owner từ MySQL
+            // Lấy danh sách venue thuộc owner
             $venues = Venue::where('owner_id', $ownerId)->get();
 
             if ($venues->isEmpty()) {
@@ -99,26 +123,33 @@ class BookingController extends Controller
                 ], 200);
             }
 
-            // Lấy danh sách venue_ids
             $venueIds = $venues->pluck('id')->toArray();
 
-            // Query BookedCourt từ MongoDB dựa trên venue_ids (không dùng with('venue'))
+            // Lấy các booking có ít nhất một sân với status trong $statuses (nếu có)
             $bookedCourtsQuery = BookedCourt::whereIn('venue_id', $venueIds);
 
-            // Nếu có filter status thì thêm điều kiện
             if (!empty($statuses)) {
-                $bookedCourtsQuery->whereIn('status', $statuses);
+                $bookedCourtsQuery->where('courts_booked', 'elemMatch', ['status' => ['$in' => $statuses]]);
             }
 
             $bookedCourts = $bookedCourtsQuery->get();
 
-            // Trả về response
+            // Lọc chỉ giữ lại các sân có status khớp với $statuses trong courts_booked
+            $filteredBookedCourts = $bookedCourts->map(function ($booking) use ($statuses) {
+                if (!empty($statuses)) {
+                    $booking->courts_booked = array_filter($booking->courts_booked, function ($court) use ($statuses) {
+                        return in_array($court['status'], $statuses);
+                    });
+                    $booking->courts_booked = array_values($booking->courts_booked);
+                }
+                return $booking;
+            });
+
             return response()->json([
                 'success' => true,
                 'message' => 'Booked courts retrieved successfully',
-                'data' => $bookedCourts
+                'data' => $filteredBookedCourts
             ], 200);
-
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([
                 'success' => false,
@@ -133,36 +164,55 @@ class BookingController extends Controller
             ], 500);
         }
     }
-
-    //API to get booked slot
+    // API để lấy các sân đã được đặt của một sân với status linh hoạt
     public function getBookedCourt(Request $request, $id)
     {
         $selectedDate = $request->query('booking_date');
 
-        $query = BookedCourt::where('venue_id', (int)$id);
+        $query = BookedCourt::where('venue_id', (int) $id);
 
         if ($selectedDate) {
             $query->where('booking_date', $selectedDate);
         }
 
+        // Lọc các booking có ít nhất một sân với status "awaiting" hoặc "accepted"
+        $query->where('courts_booked', 'elemMatch', [
+            'status' => ['$in' => ['awaiting', 'accepted']]
+        ]);
+
         $bookings = $query->get();
 
-        return response()->json($bookings);
+        // Lọc chỉ giữ lại các sân có status "awaiting" hoặc "accepted" trong courts_booked
+        $filteredBookings = $bookings->map(function ($booking) {
+            $booking->courts_booked = array_filter($booking->courts_booked, function ($court) {
+                return in_array($court['status'], ['awaiting', 'accepted']);
+            });
+            // Đặt lại key của mảng để tránh lỗ hổng chỉ số
+            $booking->courts_booked = array_values($booking->courts_booked);
+            return $booking;
+        });
+
+        return response()->json($filteredBookings);
     }
+    // API để đặt sân
     public function bookCourt(Request $request)
     {
         $data = $request->validate([
             'user_id' => 'required|integer',
             'venue_id' => 'required|integer',
-            'venue_name'=> 'required|string',
-            'venue_location'=> 'required|string',
-            'renter_name'=> 'required|string',
+            'venue_name' => 'required|string',
+            'venue_location' => 'required|string',
+            'renter_name' => 'required|string',
             'renter_email' => 'required|email',
             'renter_phone' => 'required|string',
             'courts_booked' => 'required|array',
+            'courts_booked.*.court_number' => 'required|string',
+            'courts_booked.*.start_time' => 'required|string',
+            'courts_booked.*.end_time' => 'required|string',
+            'courts_booked.*.price' => 'required|integer',
+            'courts_booked.*.status' => 'required|string|in:awaiting,accepted,cancelled',
             'total_price' => 'required|integer',
             'booking_date' => 'required|string',
-            'status' => 'required|string|in:awaiting,accepted,completed',
             'note' => 'string|nullable',
         ]);
 
@@ -173,5 +223,89 @@ class BookingController extends Controller
             'data' => $bookedCourt
         ], 201);
     }
+    // API để huỷ sân
+    public function cancelCourt(Request $request)
+    {
+        try {
+            $request->validate([
+                'id' => 'required|string',
+            ]);
 
+            $id = $request->input('id');
+            // Phân tích id: bookingId-courtNumber-startTime-endTime
+            $parts = explode('-', $id);
+            if (count($parts) !== 4) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'ID không hợp lệ'
+                ], 400);
+            }
+
+            [$bookingId, $courtNumber, $startTime, $endTime] = $parts;
+
+            // Tìm booking theo _id
+            $booking = BookedCourt::find($bookingId);
+            if (!$booking) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Booking không tồn tại'
+                ], 404);
+            }
+
+            // Lấy mảng courts_booked ra để sửa đổi
+            $courtsBooked = $booking->courts_booked;
+            $updated = false;
+
+            // Duyệt và cập nhật status
+            foreach ($courtsBooked as $index => $court) {
+                if (
+                    $court['court_number'] === $courtNumber &&
+                    $court['start_time'] === $startTime &&
+                    $court['end_time'] === $endTime
+                ) {
+                    $courtsBooked[$index]['status'] = 'cancelled';
+                    $updated = true;
+                    break;
+                }
+            }
+
+            if (!$updated) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Không tìm thấy sân để hủy'
+                ], 404);
+            }
+
+            // Gán lại mảng đã sửa đổi vào model
+            $booking->courts_booked = $courtsBooked;
+            $booking->save();
+            Log::info("Firing CourtCancelled event for user: {$booking->user_id}");
+            Log::info('Broadcasting auth token:', ['token' => request()->bearerToken()]);
+            // Phát sự kiện CourtCancelled
+            event(new CourtCancelled(
+                $booking->user_id,
+                $courtNumber,
+                $startTime,
+                $endTime,
+                $booking->venue_name
+            ));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Đã hủy sân thành công',
+                'data' => $booking
+            ], 200);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Dữ liệu không hợp lệ',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Đã có lỗi xảy ra: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }

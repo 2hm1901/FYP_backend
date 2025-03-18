@@ -54,6 +54,7 @@ Route::get('/getBookedCourts/{id}', [BookingController::class, 'getBookedCourt']
 Route::post('/bookCourt', [BookingController::class, 'bookCourt']);
 Route::get('/getBookedCourtList', [BookingController::class,'getBookedCourtList']);
 Route::get('/getRequests', [BookingController::class,'getRequests']);
+Route::put('/cancelCourt', [BookingController::class, 'cancelCourt']);
 
 //Profile APIs
 Route::middleware('auth:sanctum')->group(function () {
