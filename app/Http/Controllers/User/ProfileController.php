@@ -17,21 +17,29 @@ class ProfileController extends Controller
         $validatedData = $request->validate([
             'username' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users,email,' . $user->id,
-            'phone_number' => 'nullable|string|max:15',
+            'phone_number' => [
+                'nullable',
+                'string',
+                'max:15',
+                'regex:/^(03|05|07|08|09)[0-9]{8}$/' // Validate số điện thoại VN
+            ],
             'skill_level' => 'nullable|string|max:255',
             'avatar' => 'nullable|string|regex:/^data:image\/[a-z]+;base64,/',
         ]);
 
-        if ($request->has('avatar')) {
+        // Chỉ xử lý avatar nếu có dữ liệu mới được gửi lên
+        if ($request->filled('avatar')) {
             try {
-                $avatarUrl = $this->saveAvatar($request->avatar); // Lưu URL đầy đủ
-                $validatedData['avatar'] = $avatarUrl; // Gán URL đầy đủ vào validatedData
+                $avatarUrl = $this->saveAvatar($request->avatar);
+                $validatedData['avatar'] = $avatarUrl;
             } catch (\Exception $e) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Failed to save avatar: ' . $e->getMessage(),
                 ], 400);
             }
+        } else {
+            unset($validatedData['avatar']);
         }
 
         $user->update($validatedData);
@@ -57,16 +65,16 @@ class ProfileController extends Controller
             throw new \Exception('Failed to decode base64 image');
         }
 
-        $avatarPath = 'avatars/' . uniqid() . '.' . $extension;
+        $avatarFilename = uniqid() . '.' . $extension;
+        $avatarPath = 'avatars/' . $avatarFilename;
         Storage::disk('public')->put($avatarPath, $avatar);
 
         // Xóa ảnh cũ nếu có
         $user = Auth::user();
-        if ($user->avatar && Storage::disk('public')->exists(basename($user->avatar))) {
-            Storage::disk('public')->delete(basename($user->avatar));
+        if ($user->avatar && Storage::disk('public')->exists('avatars/' . basename($user->avatar))) {
+            Storage::disk('public')->delete('avatars/' . basename($user->avatar));
         }
 
-        // Trả về URL đầy đủ
-        return Storage::url($avatarPath); // Ví dụ: /storage/avatars/xxx.png
+        return $avatarFilename;
     }
 }
