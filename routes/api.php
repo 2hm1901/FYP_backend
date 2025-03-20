@@ -56,6 +56,8 @@ Route::post('/bookCourt', [BookingController::class, 'bookCourt']);
 Route::get('/getBookedCourtList', [BookingController::class,'getBookedCourtList']);
 Route::get('/getRequests', [BookingController::class,'getRequests']);
 Route::put('/cancelCourt', [BookingController::class, 'cancelCourt']);
+Route::post('/bookings/accept', [BookingController::class, 'acceptBooking'])->middleware('auth:sanctum');
+Route::post('/bookings/decline', [BookingController::class, 'declineBooking'])->middleware('auth:sanctum');
 
 //Notification APIs
 Route::get('/notifications', [NotificationController::class, 'getNotifications']);

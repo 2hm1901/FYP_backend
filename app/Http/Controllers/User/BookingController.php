@@ -2,7 +2,10 @@
 
 namespace App\Http\Controllers\User;
 
+use App\Events\BookingStatusUpdated;
 use App\Http\Controllers\Controller;
+use App\Models\Game;
+use App\Models\GameParticipant;
 use App\Models\Notification;
 use Illuminate\Http\Request;
 use App\Models\BookedCourt;
@@ -253,11 +256,10 @@ class BookingController extends Controller
                 ], 404);
             }
 
-            // Lấy mảng courts_booked ra để sửa đổi
+            // Cập nhật status trong courts_booked
             $courtsBooked = $booking->courts_booked;
             $updated = false;
 
-            // Duyệt và cập nhật status
             foreach ($courtsBooked as $index => $court) {
                 if (
                     $court['court_number'] === $courtNumber &&
@@ -277,24 +279,45 @@ class BookingController extends Controller
                 ], 404);
             }
 
-            // Gán lại mảng đã sửa đổi vào model
             $booking->courts_booked = $courtsBooked;
             $booking->save();
 
-            // Lưu thông báo vào database
-            $notification = Notification::create([
-                'user_id' => $booking->user_id,
-                'message' => "Sân {$courtNumber} tại {$booking->venue_name} ({$startTime} - {$endTime}) đã bị hủy bởi chủ sân",
-            ]);
-            // Phát sự kiện CourtCancelled
-            event(new CourtCancelled(
-                $booking->user_id,
-                $courtNumber,
-                $startTime,
-                $endTime,
-                $booking->venue_name,
-                $notification->id
-            ));
+            // Mặc định gửi thông báo cho người đặt sân
+            $userIds = [$booking->user_id];
+
+            // Kiểm tra game liên quan đến booking
+            $game = Game::find($id); // Giả định có trường booking_id
+            if ($game) {
+                // Nếu có game, lấy danh sách user_id từ GameParticipant
+                $gameParticipants = GameParticipant::where('game_id', $game->id)->get();
+                if ($gameParticipants->isNotEmpty()) {
+                    $userIds = $gameParticipants->pluck('user_id')->unique()->toArray();
+                    Log::info("Found participants for game {$game->id}: ", $userIds);
+                } else {
+                    Log::info("No participants found for game {$game->id}, using booking user_id");
+                }
+                // Xóa game nếu tồn tại
+                $game->delete();
+                Log::info("Deleted game with ID: {$game->id}");
+            } else {
+                Log::info("No game found for booking {$bookingId}, notifying booking owner only");
+            }
+
+            // Phát sự kiện CourtCancelled cho từng user_id
+            foreach ($userIds as $userId) {
+                $notification = Notification::create([
+                    'user_id' => $userId,
+                    'message' => "{$courtNumber} tại {$booking->venue_name} ({$startTime} - {$endTime}) đã bị hủy bởi chủ sân",
+                ]);
+                event(new CourtCancelled(
+                    $userId,
+                    $courtNumber,
+                    $startTime,
+                    $endTime,
+                    $booking->venue_name,
+                    $notification->id
+                ));
+            }
 
             return response()->json([
                 'success' => true,
@@ -308,6 +331,103 @@ class BookingController extends Controller
                 'errors' => $e->errors()
             ], 422);
         } catch (\Exception $e) {
+            Log::error('Cancel court failed: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Đã có lỗi xảy ra: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    //API chấp nhận request thuê sân
+    public function acceptBooking(Request $request)
+    {
+        try {
+            $request->validate([
+                'booking_id' => 'required|string', // _id từ MongoDB
+            ]);
+
+            $bookingId = $request->input('booking_id');
+            $booking = BookedCourt::find($bookingId);
+
+            if (!$booking) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Booking không tồn tại'
+                ], 404);
+            }
+
+            // Cập nhật status của tất cả courts_booked thành 'accepted'
+            $courtsBooked = array_map(function ($court) {
+                $court['status'] = 'accepted';
+                return $court;
+            }, $booking->courts_booked);
+
+            $booking->courts_booked = $courtsBooked;
+            $booking->save();
+
+            // Gửi thông báo thời gian thực
+            event(new BookingStatusUpdated(
+                $booking->user_id,
+                $booking->venue_name,
+                $booking->booking_date,
+                'accepted'
+            ));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Đã chấp nhận booking thành công',
+                'data' => $booking
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('Accept booking failed: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Đã có lỗi xảy ra: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    //API từ chối request thuê sân
+    public function declineBooking(Request $request)
+    {
+        try {
+            $request->validate([
+                'booking_id' => 'required|string',
+            ]);
+
+            $bookingId = $request->input('booking_id');
+            $booking = BookedCourt::find($bookingId);
+
+            if (!$booking) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Booking không tồn tại'
+                ], 404);
+            }
+
+            // Cập nhật status của tất cả courts_booked thành 'cancelled'
+            $courtsBooked = array_map(function ($court) {
+                $court['status'] = 'cancelled';
+                return $court;
+            }, $booking->courts_booked);
+
+            $booking->courts_booked = $courtsBooked;
+            $booking->save();
+
+            // Gửi thông báo thời gian thực
+            event(new BookingStatusUpdated(
+                $booking->user_id,
+                $booking->venue_name,
+                $booking->booking_date,
+                'cancelled'
+            ));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Đã từ chối booking thành công',
+                'data' => $booking
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('Decline booking failed: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Đã có lỗi xảy ra: ' . $e->getMessage()

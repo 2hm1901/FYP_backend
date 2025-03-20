@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\User;
 
 use App\Http\Controllers\Controller;
+use App\Models\GameParticipant;
 use Illuminate\Http\Request;
 use App\Models\Game;
 
 class GameController extends Controller
 {
-    public function getAllGame(){
+    public function getAllGame()
+    {
         $games = Game::where('is_active', 1)->orderBy('game_date', 'desc')->get();
         return response()->json($games);
     }
@@ -16,18 +18,20 @@ class GameController extends Controller
     public function getGameList(Request $request)
     {
         $creator_id = $request->user_id;
-        $games = Game::where('creator_id', (int)$creator_id)
-                 ->where('is_active', 1)
-                 ->get();
+        $games = Game::where('creator_id', (int) $creator_id)
+            ->where('is_active', 1)
+            ->get();
         return response()->json($games);
     }
     //API to get the venue detail
-    public function getGameDetail($id){
+    public function getGameDetail($id)
+    {
         $game = Game::find($id);
         return response()->json($game);
     }
     //API to create new game
-    public function createGame(Request $request){
+    public function createGame(Request $request)
+    {
         try {
             // Validate dữ liệu từ request
             $validatedData = $request->validate([
@@ -83,18 +87,20 @@ class GameController extends Controller
     }
 
     //Api kiểm tra xem sân này đã được tuyển người rồi hay chưa
-    public function getGameStatus(Request $request) {
+    public function getGameStatus(Request $request)
+    {
         $id = $request->query('id');
 
         $gameExists = Game::where('id', $id)->exists();
-    
+
         return response()->json([
             'is_recruited' => $gameExists
         ]);
     }
 
     //API to update game
-    public function updateGame(Request $request) {
+    public function updateGame(Request $request)
+    {
         try {
             // Validate dữ liệu từ request
             $validatedData = $request->validate([
@@ -155,9 +161,10 @@ class GameController extends Controller
             ], 500);
         }
     }
-    
+
     //API to cancel game
-    public function cancelGame(Request $request) {
+    public function cancelGame(Request $request)
+    {
         try {
             // Validate dữ liệu từ request
             $validatedData = $request->validate([
@@ -171,6 +178,11 @@ class GameController extends Controller
                     'success' => false,
                     'message' => 'Game không tồn tại'
                 ], 404);
+            }
+            // Xóa tất cả các game participant của game này
+            $gameParticipants = GameParticipant::where('game_id', $validatedData['id'])->get();
+            foreach ($gameParticipants as $gameParticipant) {
+                $gameParticipant->delete();
             }
 
             // Xóa game khỏi database
