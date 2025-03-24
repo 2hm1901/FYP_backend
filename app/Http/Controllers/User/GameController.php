@@ -8,6 +8,11 @@ use App\Models\Venue;
 use Illuminate\Http\Request;
 use App\Models\Game;
 use Illuminate\Support\Facades\Validator;
+use App\Events\GameJoinRequest;
+use App\Events\GameRequestStatusUpdated;
+use App\Events\PlayerKicked;
+use App\Models\Notification;
+use App\Models\User;
 
 class GameController extends Controller
 {
@@ -358,12 +363,32 @@ class GameController extends Controller
                 ], 400);
             }
 
+            // Lấy thông tin game và người tạo
+            $game = Game::with('creator')->find($validatedData['game_id']);
+            $requester = User::find($validatedData['user_id']);
+
             // Tạo yêu cầu tham gia mới
             GameParticipant::create([
                 'game_id' => $validatedData['game_id'],
                 'user_id' => $validatedData['user_id'],
                 'status' => 'pending'
             ]);
+
+            // Tạo thông báo cho người tạo game
+            $notification = Notification::create([
+                'user_id' => $game->creator_id,
+                'message' => "{$requester->username} muốn tham gia game của bạn",
+                'is_read' => false
+            ]);
+
+            // Gửi event thông báo
+            event(new GameJoinRequest(
+                $game->creator_id,
+                $requester->id,
+                $requester->username,
+                $game->id,
+                $notification->id
+            ));
 
             return response()->json([
                 'success' => true,
@@ -394,7 +419,7 @@ class GameController extends Controller
                 ], 422);
             }
 
-            $game = Game::findOrFail($request->game_id);
+            $game = Game::with('creator')->findOrFail($request->game_id);
             $participant = GameParticipant::where('game_id', $request->game_id)
                 ->where('user_id', $request->user_id)
                 ->where('status', 'pending')
@@ -412,6 +437,22 @@ class GameController extends Controller
 
             $game->current_players += 1;
             $game->save();
+
+            // Tạo thông báo cho người được chấp nhận
+            $notification = Notification::create([
+                'user_id' => $request->user_id,
+                'message' => "{$game->creator->username} đã chấp nhận yêu cầu tham gia game của bạn",
+                'is_read' => false
+            ]);
+
+            // Gửi event thông báo
+            event(new GameRequestStatusUpdated(
+                $request->user_id,
+                $game->id,
+                $game->creator->username,
+                'accepted',
+                $notification->id
+            ));
 
             return response()->json([
                 'success' => true,
@@ -440,6 +481,7 @@ class GameController extends Controller
                 ], 422);
             }
 
+            $game = Game::with('creator')->findOrFail($request->game_id);
             $participant = GameParticipant::where('game_id', $request->game_id)
                 ->where('user_id', $request->user_id)
                 ->where('status', 'pending')
@@ -447,6 +489,22 @@ class GameController extends Controller
 
             $participant->status = 'rejected';
             $participant->save();
+
+            // Tạo thông báo cho người bị từ chối
+            $notification = Notification::create([
+                'user_id' => $request->user_id,
+                'message' => "{$game->creator->username} đã từ chối yêu cầu tham gia game của bạn",
+                'is_read' => false
+            ]);
+
+            // Gửi event thông báo
+            event(new GameRequestStatusUpdated(
+                $request->user_id,
+                $request->game_id,
+                $game->creator->username,
+                'rejected',
+                $notification->id
+            ));
 
             return response()->json([
                 'success' => true,
@@ -511,7 +569,7 @@ class GameController extends Controller
             }
 
             // Kiểm tra xem người dùng có phải là host của game không
-            $game = Game::findOrFail($request->game_id);
+            $game = Game::with('creator')->findOrFail($request->game_id);
             if ($game->creator_id !== $request->creator_id) {
                 return response()->json([
                     'success' => false,
@@ -530,6 +588,21 @@ class GameController extends Controller
             // Giảm số người chơi hiện tại
             $game->current_players -= 1;
             $game->save();
+
+            // Tạo thông báo cho người bị kick
+            $notification = Notification::create([
+                'user_id' => $request->user_id,
+                'message' => "{$game->creator->username} đã kick bạn khỏi game",
+                'is_read' => false
+            ]);
+
+            // Gửi event thông báo
+            event(new PlayerKicked(
+                $request->user_id,
+                $game->id,
+                $game->creator->username,
+                $notification->id
+            ));
 
             return response()->json([
                 'success' => true,
