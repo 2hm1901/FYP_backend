@@ -492,5 +492,55 @@ class GameController extends Controller
             ], 500);
         }
     }
+
+    // API để kick người chơi
+    public function kickPlayer(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'game_id' => 'required|exists:games,id',
+                'user_id' => 'required|exists:users,id',
+                'creator_id' => 'required|exists:users,id'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $validator->errors()->first()
+                ], 422);
+            }
+
+            // Kiểm tra xem người dùng có phải là host của game không
+            $game = Game::findOrFail($request->game_id);
+            if ($game->creator_id !== $request->creator_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Bạn không có quyền kick người chơi'
+                ], 403);
+            }
+
+            // Tìm và xóa người chơi khỏi game
+            $participant = GameParticipant::where('game_id', $request->game_id)
+                ->where('user_id', $request->user_id)
+                ->where('status', 'accepted')
+                ->firstOrFail();
+
+            $participant->delete();
+
+            // Giảm số người chơi hiện tại
+            $game->current_players -= 1;
+            $game->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Đã kick người chơi thành công'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Có lỗi xảy ra khi kick người chơi: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }
 

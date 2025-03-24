@@ -53,6 +53,7 @@ Route::post("/requestJoinGame", [GameController::class,"requestJoinGame"]);
 Route::post("/acceptJoinRequest", [GameController::class,"acceptJoinRequest"]);
 Route::post("/rejectJoinRequest", [GameController::class,"rejectJoinRequest"]);
 Route::get("/getJoinRequests/{gameId}", [GameController::class,"getJoinRequests"]);
+Route::post("/kickPlayer", [GameController::class,"kickPlayer"]);
 
 //Booking APIs
 Route::get("/getBookings", [BookingController::class,"getBookings"]);
