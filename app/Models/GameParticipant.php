@@ -12,6 +12,7 @@ class GameParticipant extends Model
     protected $fillable = [
         'game_id',
         'user_id',
+        'status',
     ];
 
     public function game()

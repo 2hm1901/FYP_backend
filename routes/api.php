@@ -43,11 +43,16 @@ Route::delete('/venues/{id}', [VenueController::class, 'deleteVenue']);
 //Game APIs
 Route::get("/getAllGame", [GameController::class,"getAllGame"]);
 Route::get("/getGames", [GameController::class,"getGameList"]);
+Route::get("/getParticipatingGames/{userId}", [GameController::class,"getParticipatingGames"]);
 Route::get("/getGameDetail/{id}", [GameController::class,"getGameDetail"]);
 Route::post("/createGame", [GameController::class,"createGame"]);
 Route::get("/getGameStatus", [GameController::class,"getGameStatus"]);
 Route::put("/updateGame", [GameController::class,"updateGame"]);
 Route::delete("/cancelGame", [GameController::class,"cancelGame"]);
+Route::post("/requestJoinGame", [GameController::class,"requestJoinGame"]);
+Route::post("/acceptJoinRequest", [GameController::class,"acceptJoinRequest"]);
+Route::post("/rejectJoinRequest", [GameController::class,"rejectJoinRequest"]);
+Route::get("/getJoinRequests/{gameId}", [GameController::class,"getJoinRequests"]);
 
 //Booking APIs
 Route::get("/getBookings", [BookingController::class,"getBookings"]);

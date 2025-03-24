@@ -36,6 +36,11 @@ class Game extends Model
         return $this->belongsTo(User::class, 'creator_id');
     }
 
+    public function venue()
+    {
+        return $this->belongsTo(Venue::class);
+    }
+
     public function participants()
     {
         return $this->hasMany(GameParticipant::class);
