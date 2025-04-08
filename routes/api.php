@@ -74,4 +74,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('updateProfile', [ProfileController::class, 'update']);
 });
 
+//Get image
+// routes/api.php
+Route::get('/avatar/{filename}', function ($filename) {
+    $path = storage_path('app/public/avatars/' . $filename);
+    if (!file_exists($path)) {
+        abort(404);
+    }
+    return response()->file($path);
+});
+
 

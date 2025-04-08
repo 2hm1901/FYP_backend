@@ -13,7 +13,8 @@ class VerifyEmail extends Notification
 
     public function toMail($notifiable)
     {
-        $frontendUrl = env('FRONTEND_URL', 'http://localhost:5173') . "/email/verify/{$notifiable->id}/" . sha1($notifiable->email);
+        // Tạo URL thủ công, không dùng temporarySignedRoute
+        $frontendUrl = env('FRONTEND_URL', 'http://localhost/frontend') . "/email/verify/{$notifiable->id}/" . sha1($notifiable->email);
 
         \Log::info('Generated verification URL: ' . $frontendUrl);
 
