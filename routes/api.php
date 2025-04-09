@@ -9,6 +9,7 @@ use App\Http\Controllers\User\VenueController;
 use App\Http\Controllers\User\GameController;
 use App\Http\Controllers\User\BookingController;
 use App\Http\Controllers\User\ProfileController;
+use App\Http\Controllers\User\BankAccountController;
 use App\Http\Controllers\Auth\ForgotPasswordController;
 
 
@@ -26,6 +27,9 @@ Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanc
 //User APIs
 Route::get('/venue-owner', [UserController::class,'getOwnerInfo']);
 Route::get('/getUser', [UserController::class, 'getUser']);
+
+//Bank Account APIs
+Route::get('/bank-account/{userId}', [BankAccountController::class, 'getUserBankAccount'])->middleware('auth:sanctum');
 
 //Forgot Password APIs
 Route::post('/forgot-password', [ForgotPasswordController::class, 'forgot']);
@@ -78,6 +82,24 @@ Route::middleware('auth:sanctum')->group(function () {
 // routes/api.php
 Route::get('/avatar/{filename}', function ($filename) {
     $path = storage_path('app/public/avatars/' . $filename);
+    if (!file_exists($path)) {
+        abort(404);
+    }
+    return response()->file($path);
+});
+
+//Get QR code image
+Route::get('/qr_codes/{filename}', function ($filename) {
+    $path = storage_path('app/public/qr_codes/' . $filename);
+    if (!file_exists($path)) {
+        abort(404);
+    }
+    return response()->file($path);
+});
+
+//Get payment image
+Route::get('/payment_images/{filename}', function ($filename) {
+    $path = storage_path('app/public/payment_images/' . $filename);
     if (!file_exists($path)) {
         abort(404);
     }

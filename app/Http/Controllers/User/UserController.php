@@ -22,7 +22,7 @@ class UserController extends Controller
 
             // Truy vấn venue để lấy owner
             $venue = Venue::where('id', $venueId)
-                ->with('owner') // Load thông tin owner
+                ->with(['owner', 'owner.bankAccount']) // Load thông tin owner và bankAccount
                 ->first();
 
             if (!$venue) {
@@ -39,11 +39,24 @@ class UserController extends Controller
                 ], 404);
             }
 
-            // Trả về chỉ thông tin owner
+            // Trả về thông tin owner và bankAccount với cấu trúc rõ ràng
             return response()->json([
                 'success' => true,
                 'message' => 'Owner info retrieved successfully',
-                'data' => $venue->owner,
+                'data' => [
+                    'id' => $venue->owner->id,
+                    'username' => $venue->owner->username,
+                    'email' => $venue->owner->email,
+                    'phone_number' => $venue->owner->phone_number,
+                    'user_type' => $venue->owner->user_type,
+                    'avatar' => $venue->owner->avatar,
+                    'bankAccount' => $venue->owner->bankAccount ? [
+                        'id' => $venue->owner->bankAccount->id,
+                        'account_number' => $venue->owner->bankAccount->account_number,
+                        'bank_name' => $venue->owner->bankAccount->bank_name,
+                        'qr_code' => $venue->owner->bankAccount->qr_code,
+                    ] : null,
+                ],
             ], 200);
 
         } catch (\Illuminate\Validation\ValidationException $e) {

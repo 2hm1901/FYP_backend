@@ -21,5 +21,6 @@ class BookedCourt extends Model
         'total_price',
         'booking_date',
         'note',
+        'payment_image',
     ];
 }

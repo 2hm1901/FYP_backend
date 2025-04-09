@@ -12,6 +12,7 @@ use App\Models\BookedCourt;
 use App\Models\Venue;
 use App\Events\CourtCancelled;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class BookingController extends Controller
 {
@@ -218,7 +219,21 @@ class BookingController extends Controller
             'total_price' => 'required|integer',
             'booking_date' => 'required|string',
             'note' => 'string|nullable',
+            'payment_image' => 'nullable|string|regex:/^data:image\/[a-z]+;base64,/',
         ]);
+
+        // Xử lý ảnh chuyển khoản nếu có
+        if ($request->filled('payment_image')) {
+            try {
+                $paymentImageUrl = $this->savePaymentImage($request->payment_image);
+                $data['payment_image'] = $paymentImageUrl;
+            } catch (\Exception $e) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to save payment image: ' . $e->getMessage(),
+                ], 400);
+            }
+        }
 
         $bookedCourt = BookedCourt::create($data);
 
@@ -433,5 +448,26 @@ class BookingController extends Controller
                 'message' => 'Đã có lỗi xảy ra: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    private function savePaymentImage($paymentImageBase64)
+    {
+        if (!preg_match('#^data:image/\w+;base64,#i', $paymentImageBase64)) {
+            throw new \Exception('Invalid base64 image data');
+        }
+
+        $mime = explode(';', $paymentImageBase64)[0];
+        $extension = explode('/', $mime)[1];
+        $paymentImage = base64_decode(preg_replace('#^data:image/\w+;base64,#i', '', $paymentImageBase64));
+
+        if ($paymentImage === false) {
+            throw new \Exception('Failed to decode base64 image');
+        }
+
+        $paymentImageFilename = uniqid() . '.' . $extension;
+        $paymentImagePath = 'payment_images/' . $paymentImageFilename;
+        Storage::disk('public')->put($paymentImagePath, $paymentImage);
+
+        return $paymentImageFilename;
     }
 }
