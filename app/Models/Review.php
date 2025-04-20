@@ -10,20 +10,35 @@ class Review extends Model
     use HasFactory;
 
     protected $fillable = [
-        'venue_id',
-        'user_id',
+        'reviewer_id',
+        'reviewer_name',
+        'reviewed_id',
+        'reviewed_type', // 'user' hoặc 'venue'
         'rating',
         'comment',
+        'created_at',
+        'updated_at',
     ];
 
-    public function venue()
+    protected $casts = [
+        'rating' => 'integer',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+    ];
+
+    public function reviewer()
     {
-        return $this->belongsTo(Venue::class);
+        return $this->belongsTo(User::class, 'reviewer_id');
     }
 
-    public function user()
+    public function reviewedUser()
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(User::class, 'reviewed_id');
+    }
+
+    public function reviewedVenue()
+    {
+        return $this->belongsTo(Venue::class, 'reviewed_id');
     }
 }
 

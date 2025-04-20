@@ -11,6 +11,7 @@ use App\Http\Controllers\User\BookingController;
 use App\Http\Controllers\User\ProfileController;
 use App\Http\Controllers\User\BankAccountController;
 use App\Http\Controllers\Auth\ForgotPasswordController;
+use App\Http\Controllers\User\ReviewController;
 
 
 
@@ -27,6 +28,7 @@ Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanc
 //User APIs
 Route::get('/venue-owner', [UserController::class,'getOwnerInfo']);
 Route::get('/getUser', [UserController::class, 'getUser']);
+Route::post('/users/add-points', [GameController::class, 'addPoints'])->middleware('auth:sanctum');
 
 //Bank Account APIs
 Route::get('/bank-account/{userId}', [BankAccountController::class, 'getUserBankAccount'])->middleware('auth:sanctum');
@@ -105,5 +107,9 @@ Route::get('/payment_images/{filename}', function ($filename) {
     }
     return response()->file($path);
 });
+
+//Review APIs
+Route::post('/reviews', [ReviewController::class, 'createReview'])->middleware('auth:sanctum');
+Route::get('/reviews', [ReviewController::class, 'getReviews']);
 
 

@@ -15,15 +15,21 @@ class AuthController extends Controller
 {
     public function register(Request $request)
     {
-        $request->validate([
+        $rules = [
             'username' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:8|confirmed',
             'user_type' => 'required|in:renter,owner',
-            'account_number' => 'required_if:user_type,owner',
-            'bank_name' => 'required_if:user_type,owner',
-            'qr_code' => 'required_if:user_type,owner|string',
-        ]);
+        ];
+
+        // Thêm rules cho thông tin ngân hàng nếu là chủ sân
+        if ($request->user_type === 'owner') {
+            $rules['account_number'] = 'required|string';
+            $rules['bank_name'] = 'required|string';
+            $rules['qr_code'] = 'required|string';
+        }
+
+        $request->validate($rules);
 
         $user = User::create([
             'username' => $request->username,

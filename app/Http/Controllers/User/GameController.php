@@ -37,7 +37,7 @@ class GameController extends Controller
                 'id' => $game->creator->id,
                 'username' => $game->creator->username,
                 'avatar' => $game->creator->avatar,
-                // 'karma' => $game->creator->karma ?? 0,
+                'point' => $game->creator->point ?? 0,
             ],
             'court_number' => $game->court_number,
             'game_date' => $game->game_date,
@@ -612,6 +612,40 @@ class GameController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Có lỗi xảy ra khi kick người chơi: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function addPoints(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'user_id' => 'required|exists:users,id',
+                'points' => 'required|integer'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $validator->errors()->first()
+                ], 422);
+            }
+
+            $user = User::findOrFail($request->user_id);
+            $user->point += $request->points;
+            $user->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Cập nhật điểm thành công',
+                'data' => [
+                    'point' => $user->point
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Có lỗi xảy ra khi cập nhật điểm: ' . $e->getMessage()
             ], 500);
         }
     }

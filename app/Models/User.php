@@ -30,6 +30,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'user_type',
         'skill_level',
         'avatar',
+        'point',
         'created_at',
         'updated_at',
     ];
@@ -56,6 +57,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'password' => 'hashed',
             'created_at' => 'datetime',
             'updated_at' => 'datetime',
+            'point' => 'integer',
         ];
     }
 
