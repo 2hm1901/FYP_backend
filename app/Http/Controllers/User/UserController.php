@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\User;
 use App\Models\Venue;
+use App\Models\Notification;
 
 class UserController extends Controller
 {
@@ -101,6 +102,62 @@ class UserController extends Controller
                 'success' => false,
                 'message' => 'An error occurred',
                 'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function getAllUsers()
+    {
+        try {
+            $users = User::with('reviews')->get();
+
+            $usersWithRatings = $users->map(function($user) {
+                $reviews = $user->reviews;
+                $averageRating = $reviews->avg('rating');
+                
+                return [
+                    'id' => $user->id,
+                    'username' => $user->username,
+                    'email' => $user->email,
+                    'user_type' => $user->user_type,
+                    'created_at' => $user->created_at,
+                    'average_rating' => round($averageRating, 1),
+                    'total_reviews' => $reviews->count()
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'data' => $usersWithRatings
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Có lỗi xảy ra: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function deleteUser($id)
+    {
+        try {
+            $user = User::findOrFail($id);
+            
+            // Xóa tất cả các liên kết liên quan
+            $user->reviews()->delete();
+            Notification::where('user_id', $user->id)->delete();
+            
+            // Xóa người dùng
+            $user->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Đã xóa người dùng thành công'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Có lỗi xảy ra: ' . $e->getMessage()
             ], 500);
         }
     }

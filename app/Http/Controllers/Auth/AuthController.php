@@ -85,30 +85,26 @@ class AuthController extends Controller
         $user = User::where('email', $request->email)->first();
 
         if (!$user || !Hash::check($request->password, $user->password)) {
-            return [
-                'errors' => [
-                    'email' => ['The provided credentials are incorrect.']
-                ]
-            ];
-            // return [
-            //     'message' => 'The provided credentials are incorrect.' 
-            // ];
+            return response()->json([
+                'success' => false,
+                'message' => 'The provided credentials are incorrect.'
+            ], 401);
         }
 
         if (!$user->hasVerifiedEmail()) {
-            return [
-                'errors' => [
-                    'email' => ['Vui lòng xác nhận email trước khi đăng nhập.']
-                ]
-            ];
+            return response()->json([
+                'success' => false,
+                'message' => 'Vui lòng xác nhận email trước khi đăng nhập.'
+            ], 401);
         }
 
         $token = $user->createToken($user->username);
 
-        return [
+        return response()->json([
+            'success' => true,
             'user' => $user,
             'token' => $token->plainTextToken
-        ];
+        ]);
     }
 
     public function logout(Request $request)

@@ -31,7 +31,17 @@ class Venue extends Model
 
     public function reviews()
     {
-        return $this->hasMany(Review::class);
+        return $this->hasMany(Review::class, 'reviewed_id')->where('reviewed_type', 'venue');
+    }
+
+    public function courtPrices()
+    {
+        return $this->hasMany(CourtPrice::class, 'venue_id');
+    }
+
+    public function bookedCourts()
+    {
+        return $this->hasMany(BookedCourt::class, 'venue_id');
     }
 }
 

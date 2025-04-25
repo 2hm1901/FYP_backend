@@ -69,6 +69,16 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasOne(BankAccount::class);
     }
 
+    public function reviews()
+    {
+        return $this->hasMany(Review::class, 'reviewed_id')->where('reviewed_type', 'user');
+    }
+
+    public function notifications()
+    {
+        return $this->hasMany(Notification::class, 'user_id');
+    }
+
     public function sendEmailVerificationNotification()
     {
         $this->notify(new VerifyEmailNotification());

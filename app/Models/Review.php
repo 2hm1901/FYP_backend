@@ -13,7 +13,7 @@ class Review extends Model
         'reviewer_id',
         'reviewer_name',
         'reviewed_id',
-        'reviewed_type', // 'user' hoặc 'venue'
+        'reviewed_type', // 'user' or 'venue'
         'rating',
         'comment',
         'created_at',

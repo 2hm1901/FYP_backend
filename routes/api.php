@@ -112,4 +112,12 @@ Route::get('/payment_images/{filename}', function ($filename) {
 Route::post('/reviews', [ReviewController::class, 'createReview'])->middleware('auth:sanctum');
 Route::get('/reviews', [ReviewController::class, 'getReviews']);
 
+//Admin APIs
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/admin/users', [UserController::class, 'getAllUsers']);
+    Route::delete('/admin/users/{id}', [UserController::class, 'deleteUser']);
+    Route::get('/admin/venues', [VenueController::class, 'getAllVenues']);
+    Route::delete('/admin/venues/{id}', [VenueController::class, 'deleteVenue']);
+});
+
 

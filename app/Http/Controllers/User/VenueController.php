@@ -209,16 +209,63 @@ class VenueController extends Controller
     // Xóa venue
     public function deleteVenue($id)
     {
-        $venue = Venue::findOrFail($id);
+        try {
+            $venue = Venue::findOrFail($id);
+            
+            // Xóa tất cả các liên kết liên quan
+            $venue->reviews()->delete();
+            CourtPrice::where('venue_id', $venue->id)->delete();
+            BookedCourt::where('venue_id', $venue->id)->delete();
+            
+            // Xóa sân
+            $venue->delete();
 
-        // Xóa CourtPrice liên quan trong MongoDB
-        CourtPrice::where('venue_id', $venue->id)->delete();
-        BookedCourt::where('venue_id', $venue->id)->delete();
+            return response()->json([
+                'success' => true,
+                'message' => 'Đã xóa sân thành công'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Có lỗi xảy ra: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 
-        // Xóa venue trong SQL
-        $venue->delete();
+    public function getAllVenues()
+    {
+        try {
+            $venues = Venue::with(['owner', 'reviews'])->get();
 
-        return response()->json(['message' => 'Đã xóa venue thành công'], 200);
+            $venuesWithRatings = $venues->map(function($venue) {
+                $reviews = $venue->reviews;
+                $averageRating = $reviews->avg('rating');
+                
+                return [
+                    'id' => $venue->id,
+                    'name' => $venue->name,
+                    'location' => $venue->location,
+                    'owner' => $venue->owner ? [
+                        'id' => $venue->owner->id,
+                        'username' => $venue->owner->username,
+                        'email' => $venue->owner->email
+                    ] : null,
+                    'created_at' => $venue->created_at,
+                    'average_rating' => round($averageRating, 1),
+                    'total_reviews' => $reviews->count()
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'data' => $venuesWithRatings
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Có lỗi xảy ra: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
 }
