@@ -3,132 +3,77 @@
 namespace App\Http\Controllers\User;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use App\Models\User;
-use App\Models\Venue;
-use App\Models\Notification;
+use App\Http\Requests\User\GetOwnerInfoRequest;
+use App\Http\Requests\User\GetUserRequest;
+use App\Http\Resources\User\OwnerResource;
+use App\Http\Resources\User\UserListResource;
+use App\Http\Resources\User\UserResource;
+use App\Services\User\UserServiceInterface;
 
 class UserController extends Controller
 {
-    //API lấy thông tin chủ sân từ venue_id
-    public function getOwnerInfo(Request $request)
+    protected $userService;
+
+    public function __construct(UserServiceInterface $userService)
+    {
+        $this->userService = $userService;
+    }
+
+    /**
+     * API lấy thông tin chủ sân từ venue_id
+     */
+    public function getOwnerInfo(GetOwnerInfoRequest $request)
     {
         try {
-            // Validate request
-            $request->validate([
-                'venue_id' => 'required|exists:venues,id',
-            ]);
-
             $venueId = $request->venue_id;
+            $owner = $this->userService->getOwnerInfoByVenueId($venueId);
 
-            // Truy vấn venue để lấy owner
-            $venue = Venue::where('id', $venueId)
-                ->with(['owner', 'owner.bankAccount']) // Load thông tin owner và bankAccount
-                ->first();
-
-            if (!$venue) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Venue not found',
-                ], 404);
-            }
-
-            if (!$venue->owner) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Owner not found for this venue',
-                ], 404);
-            }
-
-            // Trả về thông tin owner và bankAccount với cấu trúc rõ ràng
             return response()->json([
                 'success' => true,
                 'message' => 'Owner info retrieved successfully',
-                'data' => [
-                    'id' => $venue->owner->id,
-                    'username' => $venue->owner->username,
-                    'email' => $venue->owner->email,
-                    'phone_number' => $venue->owner->phone_number,
-                    'user_type' => $venue->owner->user_type,
-                    'avatar' => $venue->owner->avatar,
-                    'bankAccount' => $venue->owner->bankAccount ? [
-                        'id' => $venue->owner->bankAccount->id,
-                        'account_number' => $venue->owner->bankAccount->account_number,
-                        'bank_name' => $venue->owner->bankAccount->bank_name,
-                        'qr_code' => $venue->owner->bankAccount->qr_code,
-                    ] : null,
-                ],
+                'data' => new OwnerResource($owner),
             ], 200);
-
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $e->errors()
-            ], 422);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'An error occurred',
-                'error' => $e->getMessage()
-            ], 500);
+                'message' => $e->getMessage(),
+            ], 404);
         }
     }
-    //API lấy thông tin người dùng từ user_id
-    public function getUser(Request $request)
+
+    /**
+     * API lấy thông tin người dùng từ user_id
+     */
+    public function getUser(GetUserRequest $request)
     {
         try {
-            $request->validate([
-                'user_id' => 'required|exists:users,id',
-            ]);
-
             $userId = $request->user_id;
-            $user = User::find($userId);
-
-            if (!$user) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'User not found',
-                ], 404);
-            }
+            $user = $this->userService->getUserById($userId);
 
             return response()->json([
                 'success' => true,
                 'message' => 'User info retrieved successfully',
-                'data' => $user
+                'data' => new UserResource($user)
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'An error occurred',
-                'error' => $e->getMessage()
-            ], 500);
+                'message' => $e->getMessage()
+            ], 404);
         }
     }
 
+    /**
+     * API lấy tất cả người dùng kèm thông tin rating
+     */
     public function getAllUsers()
     {
         try {
-            $users = User::with('reviews')->get();
-
-            $usersWithRatings = $users->map(function($user) {
-                $reviews = $user->reviews;
-                $averageRating = $reviews->avg('rating');
-                
-                return [
-                    'id' => $user->id,
-                    'username' => $user->username,
-                    'email' => $user->email,
-                    'user_type' => $user->user_type,
-                    'created_at' => $user->created_at,
-                    'average_rating' => round($averageRating, 1),
-                    'total_reviews' => $reviews->count()
-                ];
-            });
+            $users = $this->userService->getAllUsersWithRatings();
 
             return response()->json([
                 'success' => true,
-                'data' => $usersWithRatings
+                'data' => UserListResource::collection($users)
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -138,17 +83,13 @@ class UserController extends Controller
         }
     }
 
+    /**
+     * API xoá người dùng
+     */
     public function deleteUser($id)
     {
         try {
-            $user = User::findOrFail($id);
-            
-            // Xóa tất cả các liên kết liên quan
-            $user->reviews()->delete();
-            Notification::where('user_id', $user->id)->delete();
-            
-            // Xóa người dùng
-            $user->delete();
+            $this->userService->deleteUser($id);
 
             return response()->json([
                 'success' => true,

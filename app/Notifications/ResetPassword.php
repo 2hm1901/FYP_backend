@@ -23,7 +23,7 @@ class ResetPassword extends Notification
 
     public function toMail($notifiable)
     {
-        $resetUrl = env('FRONTEND_URL', 'http://localhost:5173') . "/reset-password?token={$this->token}&email=" . urlencode($notifiable->email);
+        $resetUrl = env('FRONTEND_URL', 'http://localhost') . "/reset-password?token={$this->token}&email=" . urlencode($notifiable->email);
 
         return (new MailMessage)
             ->subject('Đặt lại mật khẩu')

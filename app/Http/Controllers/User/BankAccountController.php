@@ -3,30 +3,28 @@
 namespace App\Http\Controllers\User;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use App\Models\BankAccount;
-use App\Models\User;
+use App\Http\Requests\BankAccount\GetUserBankAccountRequest;
+use App\Http\Resources\BankAccount\BankAccountResource;
+use App\Services\BankAccount\BankAccountServiceInterface;
 
 class BankAccountController extends Controller
 {
+    protected $bankAccountService;
+
+    public function __construct(BankAccountServiceInterface $bankAccountService)
+    {
+        $this->bankAccountService = $bankAccountService;
+    }
+
     /**
      * Lấy thông tin ngân hàng của người dùng
      */
-    public function getUserBankAccount($userId)
+    public function getUserBankAccount($userId, GetUserBankAccountRequest $request)
     {
         try {
-            $user = User::find($userId);
+            $data = $this->bankAccountService->getUserBankAccount($userId);
             
-            if (!$user) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Người dùng không tồn tại'
-                ], 404);
-            }
-            
-            $bankAccount = BankAccount::where('user_id', $userId)->first();
-            
-            if (!$bankAccount) {
+            if (!$data['bankAccount']) {
                 return response()->json([
                     'success' => true,
                     'message' => 'Chưa có thông tin ngân hàng',
@@ -37,7 +35,7 @@ class BankAccountController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Lấy thông tin ngân hàng thành công',
-                'bankAccount' => $bankAccount
+                'bankAccount' => new BankAccountResource($data['bankAccount'])
             ]);
         } catch (\Exception $e) {
             return response()->json([
