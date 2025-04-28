@@ -10,9 +10,52 @@ use App\Models\BankAccount;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Auth\Events\Registered;
+use Illuminate\Auth\Events\Verified;
 
+/**
+ * @OA\Tag(
+ *     name="Auth",
+ *     description="API xử lý xác thực người dùng"
+ * )
+ */
 class AuthController extends Controller
 {
+    /**
+     * @OA\Post(
+     *     path="/api/register",
+     *     summary="Đăng ký tài khoản mới",
+     *     description="API đăng ký tài khoản người dùng mới",
+     *     operationId="register",
+     *     tags={"Auth"},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"username", "email", "password", "password_confirmation", "user_type"},
+     *             @OA\Property(property="username", type="string", example="johndoe"),
+     *             @OA\Property(property="email", type="string", format="email", example="john@example.com"),
+     *             @OA\Property(property="password", type="string", format="password", example="password123"),
+     *             @OA\Property(property="password_confirmation", type="string", format="password", example="password123"),
+     *             @OA\Property(property="user_type", type="string", enum={"player", "owner", "admin"}, example="player"),
+     *             @OA\Property(property="phone_number", type="string", example="0912345678")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=201,
+     *         description="Đăng ký thành công",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="User registered successfully"),
+     *             @OA\Property(property="token", type="string", example="1|laravel_sanctum_token")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="Dữ liệu không hợp lệ"
+     *     )
+     * )
+     */
     public function register(Request $request)
     {
         $rules = [
@@ -75,6 +118,41 @@ class AuthController extends Controller
         return $filename;
     }
 
+    /**
+     * @OA\Post(
+     *     path="/api/login",
+     *     summary="Đăng nhập hệ thống",
+     *     description="API đăng nhập vào hệ thống",
+     *     operationId="login",
+     *     tags={"Auth"},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"email", "password"},
+     *             @OA\Property(property="email", type="string", format="email", example="john@example.com"),
+     *             @OA\Property(property="password", type="string", format="password", example="password123")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Đăng nhập thành công",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="User logged in successfully"),
+     *             @OA\Property(property="token", type="string", example="1|laravel_sanctum_token"),
+     *             @OA\Property(property="user", type="object")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=401,
+     *         description="Đăng nhập thất bại",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="Invalid credentials")
+     *         )
+     *     )
+     * )
+     */
     public function login(Request $request)
     {
         $request->validate([
@@ -107,6 +185,28 @@ class AuthController extends Controller
         ]);
     }
 
+    /**
+     * @OA\Post(
+     *     path="/api/logout",
+     *     summary="Đăng xuất khỏi hệ thống",
+     *     description="API đăng xuất và hủy token hiện tại",
+     *     operationId="logout",
+     *     tags={"Auth"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Đăng xuất thành công",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="User logged out successfully")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=401,
+     *         description="Chưa xác thực"
+     *     )
+     * )
+     */
     public function logout(Request $request)
     {
         $request->user()->tokens()->delete();
@@ -115,6 +215,42 @@ class AuthController extends Controller
             'message' => 'You are logged out.' 
         ];
     }
+
+    /**
+     * @OA\Get(
+     *     path="/api/email/verify/{id}/{hash}",
+     *     summary="Xác minh email",
+     *     description="API xác minh email của người dùng",
+     *     operationId="verifyEmail",
+     *     tags={"Auth"},
+     *     @OA\Parameter(
+     *         name="id",
+     *         in="path",
+     *         description="ID của người dùng",
+     *         required=true,
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Parameter(
+     *         name="hash",
+     *         in="path",
+     *         description="Hash xác minh",
+     *         required=true,
+     *         @OA\Schema(type="string")
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Xác minh thành công",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Email verified successfully")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=400,
+     *         description="Xác minh thất bại"
+     *     )
+     * )
+     */
     public function verifyEmail(Request $request, $id, $hash)
     {
         $user = User::findOrFail($id);

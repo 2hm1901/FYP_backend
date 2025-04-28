@@ -16,6 +16,12 @@ use App\Models\Venue;
 use App\Models\CourtPrice;
 use App\Models\BookedCourt;
 
+/**
+ * @OA\Tag(
+ *     name="Venue",
+ *     description="Quản lý thông tin sân badminton"
+ * )
+ */
 class VenueController extends Controller
 {
     protected $venueService;
@@ -27,6 +33,25 @@ class VenueController extends Controller
 
     /**
      * API to get all the venues
+     * 
+     * @OA\Get(
+     *     path="/api/getAllVenue",
+     *     summary="Lấy danh sách tất cả sân",
+     *     description="API lấy danh sách tất cả sân badminton",
+     *     operationId="getVenueList",
+     *     tags={"Venue"},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Lấy danh sách thành công",
+     *         @OA\JsonContent(
+     *             type="object"
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=500,
+     *         description="Lỗi server"
+     *     )
+     * )
      */
     public function getVenueList()
     {
@@ -36,17 +61,74 @@ class VenueController extends Controller
 
     /**
      * API to get the venues of the owner
+     * 
+     * @OA\Get(
+     *     path="/api/getMyVenues",
+     *     summary="Lấy danh sách sân của chủ sân",
+     *     description="API lấy danh sách sân badminton của chủ sân",
+     *     operationId="getMyVenues",
+     *     tags={"Venue"},
+     *     @OA\Parameter(
+     *         name="user_id",
+     *         in="query",
+     *         description="ID của chủ sân",
+     *         required=true,
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Lấy danh sách thành công",
+     *         @OA\JsonContent(
+     *             type="array",
+     *             @OA\Items(type="object")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=500,
+     *         description="Lỗi server"
+     *     )
+     * )
      */
     public function getMyVenues(GetMyVenuesRequest $request)
-        {
-            $userId = $request->query('user_id');
+    {
+        $userId = $request->query('user_id');
         $venues = $this->venueService->getVenuesByOwnerId($userId);
         
         return response()->json(VenueResource::collection($venues), 200);
-        }
+    }
 
     /**
      * API to get the venue detail
+     * 
+     * @OA\Get(
+     *     path="/api/getVenueDetail/{id}",
+     *     summary="Lấy thông tin chi tiết sân",
+     *     description="API lấy thông tin chi tiết sân badminton theo ID",
+     *     operationId="getVenueDetail",
+     *     tags={"Venue"},
+     *     @OA\Parameter(
+     *         name="id",
+     *         in="path",
+     *         description="ID của sân",
+     *         required=true,
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Lấy thông tin thành công",
+     *         @OA\JsonContent(
+     *             type="object"
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Không tìm thấy sân"
+     *     ),
+     *     @OA\Response(
+     *         response=500,
+     *         description="Lỗi server"
+     *     )
+     * )
      */
     public function getVenueDetail($id)
     {

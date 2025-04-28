@@ -24,6 +24,12 @@ use App\Models\Venue;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
+/**
+ * @OA\Tag(
+ *     name="Booking",
+ *     description="Quản lý đặt sân badminton"
+ * )
+ */
 class BookingController extends Controller
 {
     protected $bookingService;
@@ -35,6 +41,42 @@ class BookingController extends Controller
 
     /**
      * API lấy danh sách các sân đã đặt của một user với status linh hoạt
+     * 
+     * @OA\Get(
+     *     path="/api/getBookings",
+     *     summary="Lấy danh sách sân đã đặt của người dùng",
+     *     description="API lấy danh sách sân đã đặt của một user với status linh hoạt",
+     *     operationId="getBookings",
+     *     tags={"Booking"},
+     *     @OA\Parameter(
+     *         name="user_id",
+     *         in="query",
+     *         description="ID của người dùng",
+     *         required=true,
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Parameter(
+     *         name="status",
+     *         in="query",
+     *         description="Trạng thái của booking (awaiting, accepted, declined, cancelled)",
+     *         required=false,
+     *         @OA\Schema(
+     *             type="array",
+     *             @OA\Items(type="string", enum={"awaiting", "accepted", "declined", "cancelled"})
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Lấy danh sách thành công",
+     *         @OA\JsonContent(
+     *             type="object"
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=500,
+     *         description="Lỗi server"
+     *     )
+     * )
      */
     public function getBookings(GetBookingsRequest $request)
     {
@@ -151,6 +193,48 @@ class BookingController extends Controller
 
     /**
      * API để đặt sân
+     * 
+     * @OA\Post(
+     *     path="/api/bookCourt",
+     *     summary="Đặt sân",
+     *     description="API để đặt sân badminton",
+     *     operationId="bookCourt",
+     *     tags={"Booking"},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"venue_id", "user_id", "booking_date", "courts"},
+     *             @OA\Property(property="venue_id", type="integer", description="ID của sân"),
+     *             @OA\Property(property="user_id", type="integer", description="ID của người đặt"),
+     *             @OA\Property(property="booking_date", type="string", format="date", description="Ngày đặt (YYYY-MM-DD)"),
+     *             @OA\Property(property="courts", type="array", description="Danh sách sân cần đặt",
+     *                 @OA\Items(
+     *                     type="object",
+     *                     @OA\Property(property="court_number", type="integer", description="Số sân"),
+     *                     @OA\Property(property="start_time", type="string", format="time", description="Thời gian bắt đầu (HH:MM)"),
+     *                     @OA\Property(property="end_time", type="string", format="time", description="Thời gian kết thúc (HH:MM)")
+     *                 )
+     *             ),
+     *             @OA\Property(property="payment_image", type="string", description="Ảnh chuyển khoản dạng base64 (tuỳ chọn)")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=201,
+     *         description="Đặt sân thành công",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="message", type="string", example="Booking successful"),
+     *             @OA\Property(property="data", type="object")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=400,
+     *         description="Dữ liệu không hợp lệ"
+     *     ),
+     *     @OA\Response(
+     *         response=500,
+     *         description="Lỗi server"
+     *     )
+     * )
      */
     public function bookCourt(BookCourtRequest $request)
     {
