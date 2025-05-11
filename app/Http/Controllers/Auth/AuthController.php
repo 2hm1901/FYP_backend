@@ -165,7 +165,7 @@ class AuthController extends Controller
         if (!$user || !Hash::check($request->password, $user->password)) {
             return response()->json([
                 'success' => false,
-                'message' => 'The provided credentials are incorrect.'
+                'message' => 'Sai tài khoản hoặc mật khẩu!'
             ], 401);
         }
 

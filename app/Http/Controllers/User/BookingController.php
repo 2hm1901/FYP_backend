@@ -269,9 +269,6 @@ class BookingController extends Controller
         try {
             $id = $request->input('id');
             
-            try {
-                $booking = $this->bookingService->cancelCourt($id);
-                
             // Phân tích id: bookingId-courtNumber-startTime-endTime
             $parts = explode('-', $id);
             if (count($parts) !== 4) {
@@ -283,11 +280,48 @@ class BookingController extends Controller
 
             [$bookingId, $courtNumber, $startTime, $endTime] = $parts;
 
+            // Tìm booking theo _id
+            $booking = BookedCourt::find($bookingId);
+            if (!$booking) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Booking không tồn tại'
+                ], 404);
+            }
+
+            // Lấy mảng courts_booked ra để sửa đổi
+            $courtsBooked = $booking->courts_booked;
+            $updated = false;
+
+            // Duyệt và cập nhật status
+            foreach ($courtsBooked as $index => $court) {
+                if (
+                    $court['court_number'] === $courtNumber &&
+                    $court['start_time'] === $startTime &&
+                    $court['end_time'] === $endTime
+                ) {
+                    $courtsBooked[$index]['status'] = 'cancelled';
+                    $updated = true;
+                    break;
+                }
+            }
+
+            if (!$updated) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Không tìm thấy sân để hủy'
+                ], 404);
+            }
+
+            // Gán lại mảng đã sửa đổi vào model
+            $booking->courts_booked = $courtsBooked;
+            $booking->save();
+
             // Mặc định gửi thông báo cho người đặt sân
             $userIds = [$booking->user_id];
 
             // Kiểm tra game liên quan đến booking
-                $game = Game::find($id); 
+            $game = Game::find($id);
             if ($game) {
                 // Nếu có game, lấy danh sách user_id từ GameParticipant
                 $gameParticipants = GameParticipant::where('game_id', $game->id)->get();
@@ -323,14 +357,8 @@ class BookingController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Đã hủy sân thành công',
-                    'data' => new BookingResource($booking)
+                'data' => new BookingResource($booking)
             ], 200);
-            } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                    'message' => $e->getMessage()
-                ], 404);
-            }
         } catch (\Exception $e) {
             Log::error('Cancel court failed: ' . $e->getMessage());
             return response()->json([
@@ -348,8 +376,33 @@ class BookingController extends Controller
         try {
             $bookingId = $request->input('booking_id');
             
-            try {
-                $booking = $this->bookingService->acceptBooking($bookingId);
+            // Tìm booking theo _id
+            $booking = BookedCourt::find($bookingId);
+            if (!$booking) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Booking không tồn tại'
+                ], 404);
+            }
+
+            // Cập nhật tất cả các sân trong booking sang trạng thái accepted
+            $courtsBooked = $booking->courts_booked;
+            foreach ($courtsBooked as $index => $court) {
+                // Chỉ cập nhật các court có status là awaiting
+                if ($court['status'] === 'awaiting') {
+                    $courtsBooked[$index]['status'] = 'accepted';
+                }
+            }
+
+            // Lưu lại booking đã cập nhật
+            $booking->courts_booked = $courtsBooked;
+            $booking->save();
+
+            // Tạo thông báo cho người đặt sân
+            $notification = Notification::create([
+                'user_id' => $booking->user_id,
+                'message' => "Yêu cầu đặt sân của bạn tại {$booking->venue_name} đã được chấp nhận",
+            ]);
 
             // Gửi thông báo thời gian thực
             event(new BookingStatusUpdated(
@@ -362,14 +415,8 @@ class BookingController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Đã chấp nhận booking thành công',
-                    'data' => new BookingResource($booking)
+                'data' => new BookingResource($booking)
             ], 200);
-            } catch (\Exception $e) {
-                return response()->json([
-                    'success' => false,
-                    'message' => $e->getMessage()
-                ], 404);
-            }
         } catch (\Exception $e) {
             Log::error('Accept booking failed: ' . $e->getMessage());
             return response()->json([
@@ -387,28 +434,58 @@ class BookingController extends Controller
         try {
             $bookingId = $request->input('booking_id');
             
-            try {
-                $booking = $this->bookingService->declineBooking($bookingId);
+            // Tìm booking theo _id
+            $booking = BookedCourt::find($bookingId);
+            if (!$booking) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Booking không tồn tại'
+                ], 404);
+            }
+
+            // Cập nhật tất cả các sân trong booking sang trạng thái declined
+            $courtsBooked = $booking->courts_booked;
+            foreach ($courtsBooked as $index => $court) {
+                // Chỉ cập nhật các court có status là awaiting
+                if ($court['status'] === 'awaiting') {
+                    $courtsBooked[$index]['status'] = 'declined';
+                }
+            }
+
+            // Lưu lại booking đã cập nhật
+            $booking->courts_booked = $courtsBooked;
+            $booking->save();
+
+            // Kiểm tra game liên quan đến booking
+            $game = Game::find($bookingId);
+            if ($game) {
+                // Xóa các participant
+                GameParticipant::where('game_id', $game->id)->delete();
+                
+                // Xóa game
+                $game->delete();
+                Log::info("Deleted game with ID: {$game->id}");
+            }
+
+            // Tạo thông báo cho người đặt sân
+            $notification = Notification::create([
+                'user_id' => $booking->user_id,
+                'message' => "Yêu cầu đặt sân của bạn tại {$booking->venue_name} đã bị từ chối",
+            ]);
 
             // Gửi thông báo thời gian thực
             event(new BookingStatusUpdated(
                 $booking->user_id,
                 $booking->venue_name,
                 $booking->booking_date,
-                'cancelled'
+                'declined'
             ));
 
             return response()->json([
                 'success' => true,
                 'message' => 'Đã từ chối booking thành công',
-                    'data' => new BookingResource($booking)
+                'data' => new BookingResource($booking)
             ], 200);
-            } catch (\Exception $e) {
-                return response()->json([
-                    'success' => false,
-                    'message' => $e->getMessage()
-                ], 404);
-            }
         } catch (\Exception $e) {
             Log::error('Decline booking failed: ' . $e->getMessage());
             return response()->json([
