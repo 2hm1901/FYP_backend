@@ -8,6 +8,10 @@ use App\Repositories\GameParticipant\GameParticipantRepositoryInterface;
 use App\Repositories\Notification\NotificationRepositoryInterface;
 use App\Repositories\Venue\VenueRepositoryInterface;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
+use App\Events\CourtCancelled;
+use App\Events\BookingStatusUpdated;
 
 class BookingService implements BookingServiceInterface
 {
@@ -74,6 +78,11 @@ class BookingService implements BookingServiceInterface
      */
     public function bookCourt(array $data)
     {
+        // Xử lý ảnh thanh toán nếu có
+        if (isset($data['payment_image']) && strpos($data['payment_image'], 'data:image') === 0) {
+            $data['payment_image'] = $this->savePaymentImage($data['payment_image']);
+        }
+
         // Tạo booking mới
         $bookingData = [
             '_id' => (string) Str::uuid(),
@@ -110,6 +119,86 @@ class BookingService implements BookingServiceInterface
     }
 
     /**
+     * Huỷ sân từ ID phức hợp (bookingId-courtNumber-startTime-endTime)
+     */
+    public function cancelCourtByCompositeId($compositeId)
+    {
+        // Phân tích ID phức hợp
+        $parts = explode('-', $compositeId);
+        if (count($parts) !== 4) {
+            throw new \Exception('ID không hợp lệ');
+        }
+
+        [$bookingId, $courtNumber, $startTime, $endTime] = $parts;
+
+        // Tìm booking
+        $booking = $this->bookingRepository->findById($bookingId);
+        if (!$booking) {
+            throw new \Exception('Booking không tồn tại');
+        }
+
+        // Cập nhật trạng thái sân
+        $courtsBooked = $booking->courts_booked;
+        $updated = false;
+
+        foreach ($courtsBooked as $index => $court) {
+            if (
+                $court['court_number'] === $courtNumber &&
+                $court['start_time'] === $startTime &&
+                $court['end_time'] === $endTime
+            ) {
+                $courtsBooked[$index]['status'] = 'cancelled';
+                $updated = true;
+                break;
+            }
+        }
+
+        if (!$updated) {
+            throw new \Exception('Không tìm thấy sân để hủy');
+        }
+
+        // Cập nhật booking
+        $booking->courts_booked = $courtsBooked;
+        $this->bookingRepository->update($booking);
+
+        // Xử lý game và thông báo
+        $game = $this->gameRepository->findById($compositeId);
+        $userIds = [$booking->user_id];
+
+        if ($game) {
+            // Lấy danh sách người tham gia
+            $participants = $this->gameParticipantRepository->getParticipantsByGameId($game->id);
+            if (!$participants->isEmpty()) {
+                $userIds = $participants->pluck('user_id')->unique()->toArray();
+                Log::info("Found participants for game {$game->id}: ", $userIds);
+            }
+            
+            // Xóa game
+            $this->gameRepository->delete($game);
+            Log::info("Deleted game with ID: {$game->id}");
+        }
+
+        // Tạo thông báo và phát sự kiện
+        foreach ($userIds as $userId) {
+            $notification = $this->notificationRepository->create([
+                'user_id' => $userId,
+                'message' => "{$courtNumber} tại {$booking->venue_name} ({$startTime} - {$endTime}) đã bị hủy bởi chủ sân",
+            ]);
+            
+            event(new CourtCancelled(
+                $userId,
+                $courtNumber,
+                $startTime,
+                $endTime,
+                $booking->venue_name,
+                $notification->id
+            ));
+        }
+
+        return $booking;
+    }
+
+    /**
      * Huỷ sân
      */
     public function cancelCourt($id)
@@ -140,20 +229,38 @@ class BookingService implements BookingServiceInterface
             throw new \Exception('Booking not found');
         }
 
-        foreach ($booking->courts_booked as $key => $court) {
-            $booking->courts_booked[$key]['status'] = 'accepted';
+        // Cập nhật các sân có trạng thái awaiting sang accepted
+        $updated = false;
+        $courtsBooked = $booking->courts_booked;
+        
+        foreach ($courtsBooked as $key => $court) {
+            if ($court['status'] === 'awaiting') {
+                $courtsBooked[$key]['status'] = 'accepted';
+                $updated = true;
+            }
         }
 
+        if (!$updated) {
+            throw new \Exception('Không có sân nào cần được chấp nhận');
+        }
+
+        $booking->courts_booked = $courtsBooked;
         $this->bookingRepository->update($booking);
 
-        // Tạo thông báo cho người đặt sân
-        $notificationData = [
-            'user_id' => $booking->user_id,
-            'message' => "Yêu cầu đặt sân của bạn tại {$booking->venue_name} đã được chấp nhận",
-            'is_read' => false,
-        ];
+        // // Tạo thông báo cho người đặt sân
+        // $notification = $this->notificationRepository->create([
+        //     'user_id' => $booking->user_id,
+        //     'message' => "Yêu cầu đặt sân của bạn tại {$booking->venue_name} đã được chấp nhận",
+        //     'is_read' => false,
+        // ]);
 
-        $this->notificationRepository->create($notificationData);
+        // Phát sự kiện cập nhật trạng thái
+        event(new BookingStatusUpdated(
+            $booking->user_id,
+            $booking->venue_name,
+            $booking->booking_date,
+            'accepted'
+        ));
 
         return $booking;
     }
@@ -169,34 +276,78 @@ class BookingService implements BookingServiceInterface
             throw new \Exception('Booking not found');
         }
 
-        foreach ($booking->courts_booked as $key => $court) {
-            $booking->courts_booked[$key]['status'] = 'declined';
+        // Cập nhật các sân có trạng thái awaiting sang declined
+        $updated = false;
+        $courtsBooked = $booking->courts_booked;
+        
+        foreach ($courtsBooked as $key => $court) {
+            if ($court['status'] === 'awaiting') {
+                $courtsBooked[$key]['status'] = 'declined';
+                $updated = true;
+            }
         }
 
+        if (!$updated) {
+            throw new \Exception('Không có sân nào cần từ chối');
+        }
+
+        $booking->courts_booked = $courtsBooked;
         $this->bookingRepository->update($booking);
 
         // Xoá game nếu có
-        $games = $this->gameRepository->findById($bookingId);
-        if ($games) {
+        $game = $this->gameRepository->findById($bookingId);
+        if ($game) {
             // Xoá người tham gia
-            $participants = $this->gameParticipantRepository->getParticipantsByGameId($bookingId);
-            foreach ($participants as $participant) {
-                $this->gameRepository->delete($participant);
-            }
-
+            $this->gameParticipantRepository->deleteByGameId($game->id);
+            
             // Xoá game
-            $this->gameRepository->delete($games);
+            $this->gameRepository->delete($game);
+            Log::info("Deleted game with ID: {$game->id}");
         }
 
-        // Tạo thông báo cho người đặt sân
-        $notificationData = [
-            'user_id' => $booking->user_id,
-            'message' => "Yêu cầu đặt sân của bạn tại {$booking->venue_name} đã bị từ chối",
-            'is_read' => false,
-        ];
+        // // Tạo thông báo cho người đặt sân
+        // $notification = $this->notificationRepository->create([
+        //     'user_id' => $booking->user_id,
+        //     'message' => "Yêu cầu đặt sân của bạn tại {$booking->venue_name} đã bị từ chối",
+        //     'is_read' => false,
+        // ]);
 
-        $this->notificationRepository->create($notificationData);
+        // Phát sự kiện cập nhật trạng thái
+        event(new BookingStatusUpdated(
+            $booking->user_id,
+            $booking->venue_name,
+            $booking->booking_date,
+            'declined'
+        ));
 
         return $booking;
+    }
+
+    /**
+     * Lưu ảnh chuyển khoản
+     * 
+     * @param string $paymentImageBase64
+     * @return string
+     * @throws \Exception
+     */
+    private function savePaymentImage($paymentImageBase64)
+    {
+        if (!preg_match('#^data:image/\w+;base64,#i', $paymentImageBase64)) {
+            throw new \Exception('Invalid base64 image data');
+        }
+
+        $mime = explode(';', $paymentImageBase64)[0];
+        $extension = explode('/', $mime)[1];
+        $paymentImage = base64_decode(preg_replace('#^data:image/\w+;base64,#i', '', $paymentImageBase64));
+
+        if ($paymentImage === false) {
+            throw new \Exception('Failed to decode base64 image');
+        }
+
+        $paymentImageFilename = uniqid() . '.' . $extension;
+        $paymentImagePath = 'payment_images/' . $paymentImageFilename;
+        Storage::disk('public')->put($paymentImagePath, $paymentImage);
+
+        return $paymentImageFilename;
     }
 } 

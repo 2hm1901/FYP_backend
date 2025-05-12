@@ -9,6 +9,8 @@ interface BookingServiceInterface
     public function getBookedCourtList($ownerId, $statuses = []);
     public function getBookedCourt($venueId, $bookingDate = null);
     public function bookCourt(array $data);
+    public function cancelCourt($id);
+    public function cancelCourtByCompositeId($compositeId);
     public function acceptBooking($bookingId);
     public function declineBooking($bookingId);
 } 

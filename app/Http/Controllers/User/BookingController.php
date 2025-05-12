@@ -2,8 +2,6 @@
 
 namespace App\Http\Controllers\User;
 
-use App\Events\BookingStatusUpdated;
-use App\Events\CourtCancelled;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Booking\AcceptBookingRequest;
 use App\Http\Requests\Booking\BookCourtRequest;
@@ -14,15 +12,9 @@ use App\Http\Requests\Booking\GetBookingsRequest;
 use App\Http\Requests\Booking\GetRequestsRequest;
 use App\Http\Resources\Booking\BookingCollection;
 use App\Http\Resources\Booking\BookingResource;
-use App\Models\Game;
-use App\Models\GameParticipant;
-use App\Models\Notification;
 use App\Services\Booking\BookingServiceInterface;
 use Illuminate\Http\Request;
-use App\Models\BookedCourt;
-use App\Models\Venue;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 
 /**
  * @OA\Tag(
@@ -238,27 +230,22 @@ class BookingController extends Controller
      */
     public function bookCourt(BookCourtRequest $request)
     {
-        $data = $request->validated();
+        try {
+            $data = $request->validated();
+            
+            $booking = $this->bookingService->bookCourt($data);
 
-        // Xử lý ảnh chuyển khoản nếu có
-        if ($request->filled('payment_image')) {
-            try {
-                $paymentImageUrl = $this->savePaymentImage($request->payment_image);
-                $data['payment_image'] = $paymentImageUrl;
-            } catch (\Exception $e) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Failed to save payment image: ' . $e->getMessage(),
-                ], 400);
-            }
+            return response()->json([
+                'message' => 'Booking successful',
+                'data' => new BookingResource($booking)
+            ], 201);
+        } catch (\Exception $e) {
+            Log::error('Book court failed: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Đã có lỗi xảy ra: ' . $e->getMessage()
+            ], 500);
         }
-
-        $booking = $this->bookingService->bookCourt($data);
-
-        return response()->json([
-            'message' => 'Booking successful',
-            'data' => new BookingResource($booking)
-        ], 201);
     }
 
     /**
@@ -269,90 +256,7 @@ class BookingController extends Controller
         try {
             $id = $request->input('id');
             
-            // Phân tích id: bookingId-courtNumber-startTime-endTime
-            $parts = explode('-', $id);
-            if (count($parts) !== 4) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'ID không hợp lệ'
-                ], 400);
-            }
-
-            [$bookingId, $courtNumber, $startTime, $endTime] = $parts;
-
-            // Tìm booking theo _id
-            $booking = BookedCourt::find($bookingId);
-            if (!$booking) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Booking không tồn tại'
-                ], 404);
-            }
-
-            // Lấy mảng courts_booked ra để sửa đổi
-            $courtsBooked = $booking->courts_booked;
-            $updated = false;
-
-            // Duyệt và cập nhật status
-            foreach ($courtsBooked as $index => $court) {
-                if (
-                    $court['court_number'] === $courtNumber &&
-                    $court['start_time'] === $startTime &&
-                    $court['end_time'] === $endTime
-                ) {
-                    $courtsBooked[$index]['status'] = 'cancelled';
-                    $updated = true;
-                    break;
-                }
-            }
-
-            if (!$updated) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Không tìm thấy sân để hủy'
-                ], 404);
-            }
-
-            // Gán lại mảng đã sửa đổi vào model
-            $booking->courts_booked = $courtsBooked;
-            $booking->save();
-
-            // Mặc định gửi thông báo cho người đặt sân
-            $userIds = [$booking->user_id];
-
-            // Kiểm tra game liên quan đến booking
-            $game = Game::find($id);
-            if ($game) {
-                // Nếu có game, lấy danh sách user_id từ GameParticipant
-                $gameParticipants = GameParticipant::where('game_id', $game->id)->get();
-                if ($gameParticipants->isNotEmpty()) {
-                    $userIds = $gameParticipants->pluck('user_id')->unique()->toArray();
-                    Log::info("Found participants for game {$game->id}: ", $userIds);
-                } else {
-                    Log::info("No participants found for game {$game->id}, using booking user_id");
-                }
-                // Xóa game nếu tồn tại
-                $game->delete();
-                Log::info("Deleted game with ID: {$game->id}");
-            } else {
-                Log::info("No game found for booking {$bookingId}, notifying booking owner only");
-            }
-
-            // Phát sự kiện CourtCancelled cho từng user_id
-            foreach ($userIds as $userId) {
-                $notification = Notification::create([
-                    'user_id' => $userId,
-                    'message' => "{$courtNumber} tại {$booking->venue_name} ({$startTime} - {$endTime}) đã bị hủy bởi chủ sân",
-                ]);
-                event(new CourtCancelled(
-                    $userId,
-                    $courtNumber,
-                    $startTime,
-                    $endTime,
-                    $booking->venue_name,
-                    $notification->id
-                ));
-            }
+            $booking = $this->bookingService->cancelCourtByCompositeId($id);
 
             return response()->json([
                 'success' => true,
@@ -376,41 +280,7 @@ class BookingController extends Controller
         try {
             $bookingId = $request->input('booking_id');
             
-            // Tìm booking theo _id
-            $booking = BookedCourt::find($bookingId);
-            if (!$booking) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Booking không tồn tại'
-                ], 404);
-            }
-
-            // Cập nhật tất cả các sân trong booking sang trạng thái accepted
-            $courtsBooked = $booking->courts_booked;
-            foreach ($courtsBooked as $index => $court) {
-                // Chỉ cập nhật các court có status là awaiting
-                if ($court['status'] === 'awaiting') {
-                    $courtsBooked[$index]['status'] = 'accepted';
-                }
-            }
-
-            // Lưu lại booking đã cập nhật
-            $booking->courts_booked = $courtsBooked;
-            $booking->save();
-
-            // Tạo thông báo cho người đặt sân
-            $notification = Notification::create([
-                'user_id' => $booking->user_id,
-                'message' => "Yêu cầu đặt sân của bạn tại {$booking->venue_name} đã được chấp nhận",
-            ]);
-
-            // Gửi thông báo thời gian thực
-            event(new BookingStatusUpdated(
-                $booking->user_id,
-                $booking->venue_name,
-                $booking->booking_date,
-                'accepted'
-            ));
+            $booking = $this->bookingService->acceptBooking($bookingId);
 
             return response()->json([
                 'success' => true,
@@ -434,52 +304,7 @@ class BookingController extends Controller
         try {
             $bookingId = $request->input('booking_id');
             
-            // Tìm booking theo _id
-            $booking = BookedCourt::find($bookingId);
-            if (!$booking) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Booking không tồn tại'
-                ], 404);
-            }
-
-            // Cập nhật tất cả các sân trong booking sang trạng thái declined
-            $courtsBooked = $booking->courts_booked;
-            foreach ($courtsBooked as $index => $court) {
-                // Chỉ cập nhật các court có status là awaiting
-                if ($court['status'] === 'awaiting') {
-                    $courtsBooked[$index]['status'] = 'declined';
-                }
-            }
-
-            // Lưu lại booking đã cập nhật
-            $booking->courts_booked = $courtsBooked;
-            $booking->save();
-
-            // Kiểm tra game liên quan đến booking
-            $game = Game::find($bookingId);
-            if ($game) {
-                // Xóa các participant
-                GameParticipant::where('game_id', $game->id)->delete();
-                
-                // Xóa game
-                $game->delete();
-                Log::info("Deleted game with ID: {$game->id}");
-            }
-
-            // Tạo thông báo cho người đặt sân
-            $notification = Notification::create([
-                'user_id' => $booking->user_id,
-                'message' => "Yêu cầu đặt sân của bạn tại {$booking->venue_name} đã bị từ chối",
-            ]);
-
-            // Gửi thông báo thời gian thực
-            event(new BookingStatusUpdated(
-                $booking->user_id,
-                $booking->venue_name,
-                $booking->booking_date,
-                'declined'
-            ));
+            $booking = $this->bookingService->declineBooking($bookingId);
 
             return response()->json([
                 'success' => true,
@@ -493,33 +318,5 @@ class BookingController extends Controller
                 'message' => 'Đã có lỗi xảy ra: ' . $e->getMessage()
             ], 500);
         }
-    }
-
-    /**
-     * Lưu ảnh chuyển khoản
-     * 
-     * @param string $paymentImageBase64
-     * @return string
-     * @throws \Exception
-     */
-    private function savePaymentImage($paymentImageBase64)
-    {
-        if (!preg_match('#^data:image/\w+;base64,#i', $paymentImageBase64)) {
-            throw new \Exception('Invalid base64 image data');
-        }
-
-        $mime = explode(';', $paymentImageBase64)[0];
-        $extension = explode('/', $mime)[1];
-        $paymentImage = base64_decode(preg_replace('#^data:image/\w+;base64,#i', '', $paymentImageBase64));
-
-        if ($paymentImage === false) {
-            throw new \Exception('Failed to decode base64 image');
-        }
-
-        $paymentImageFilename = uniqid() . '.' . $extension;
-        $paymentImagePath = 'payment_images/' . $paymentImageFilename;
-        Storage::disk('public')->put($paymentImagePath, $paymentImage);
-
-        return $paymentImageFilename;
     }
 }

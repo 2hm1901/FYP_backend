@@ -13,4 +13,12 @@ class GameParticipantRepository implements GameParticipantRepositoryInterface
     {
         return GameParticipant::where('game_id', $gameId)->get();
     }
+    
+    /**
+     * Xóa tất cả người tham gia của một game
+     */
+    public function deleteByGameId($gameId)
+    {
+        return GameParticipant::where('game_id', $gameId)->delete();
+    }
 } 
